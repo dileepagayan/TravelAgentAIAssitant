@@ -3,7 +3,7 @@ import ballerina/email;
 import ballerinax/ai.openai;
 import ballerinax/ai.pinecone;
 
-final ai:TextDataLoader kbDataLoader = check new ("./files/ReceivedFile.md");
+final ai:TextDataLoader kbDataLoader = check new ("/tmp/ReceivedFile.md");
 
 final pinecone:VectorStore pineconeVectorstore = check new ("https://travelpackage-3a9c20c.svc.aped-4627-b74a.pinecone.io", string `${PINECONE_KEY}`);
 final openai:EmbeddingProvider openaiEmbeddingprovider = check new (string `${OPEN_AI_KEY}`, "text-embedding-3-small");
