@@ -1,5 +1,4 @@
 import ballerina/io;
-import ballerina/os;
 
 // Find travel places for a destination based on interests
 function findTravelPlaces(string destination, string[] interests) returns findTravelPlacesResponse|error {
