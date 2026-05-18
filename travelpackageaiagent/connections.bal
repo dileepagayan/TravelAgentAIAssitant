@@ -10,5 +10,5 @@ final openai:EmbeddingProvider openaiEmbeddingprovider = check new (string `${OP
 final ai:VectorKnowledgeBase aiVectorknowledgebase = new (pineconeVectorstore, openaiEmbeddingprovider);
 final openai:ModelProvider openaiModelprovider = check new (string `${OPEN_AI_KEY}`, "gpt-4o-mini", maxTokens = 4000);
 
-final AiMcpbasetoolkit aiMcpbasetoolkit = check new ("http://" + string `${MCP_SERVER_URL}` + "/mcp");
+final AiMcpbasetoolkit aiMcpbasetoolkit = check new (string `${MCP_SERVER_URL}` + "/mcp");
 final email:SmtpClient emailSmtpclient = check new ("smtp.gmail.com", string `${EMAIL_USERNAME}`, string `${EMAIL_PASSWORD}`);
