@@ -1,8 +1,13 @@
+import ballerina/io;
+import ballerina/os;
+
 // Find travel places for a destination based on interests
 function findTravelPlaces(string destination, string[] interests) returns findTravelPlacesResponse|error {
+    io:println(string `[INFO] Finding travel places for destination: ${destination}, interests: ${interests.toString()}`);
+    
     // Step 1: Get geocoding information for the destination
 
-
+    io:println(string `[INFO] Calling geocoding API for destination: ${destination}`);
     geocodingApiResponseType geocodingApiResponse = check geocodingApi->/search.get(
         name = destination,
         count = "1",
@@ -19,19 +24,22 @@ function findTravelPlaces(string destination, string[] interests) returns findTr
     ResultsItem locationResult = results[0];
     decimal latitude = locationResult.latitude;
     decimal longitude = locationResult.longitude;
+    io:println(string `[INFO] Geocoding successful. Location: ${locationResult.name}, Lat: ${latitude}, Lon: ${longitude}`);
 
     // Step 2: Map interests to Geoapify categories
     string categories = mapInterestsToCategories(interests);
+    io:println(string `[INFO] Mapped interests to categories: ${categories}`);
 
     // Step 3: Call Geoapify Places API
     // Note: Geoapify uses longitude,latitude,radius format for circle filter
     string circleFilter = string `circle:${longitude},${latitude},10000`;
     
+    io:println(string `[INFO] Calling Geoapify Places API with filter: ${circleFilter}`);
     PlacesApiResponseType placesResponse = check placesApi->/places.get(
         categories = categories,
         filter = circleFilter,
         'limit = "10",
-        apiKey = "f7249db20edb4983b7cd9fa05b6a05c0"
+        apiKey = os:getEnv("GEOAPIFY_API_KEY")
     );
 
     // Step 4: Transform response to match expected format
@@ -84,6 +92,7 @@ function findTravelPlaces(string destination, string[] interests) returns findTr
         });
     }
     
+    io:println(string `[INFO] Found ${travelPlaces.length()} travel places for ${destination}`);
     return travelPlaces;
 }
 
@@ -151,7 +160,10 @@ function mapInterestsToCategories(string[] interests) returns string {
 
 // Get weather impact for a destination and date
 function getWeatherImpact(string destination, string date) returns WeatherImpactResponse|error {
+    io:println(string `[INFO] Getting weather impact for destination: ${destination}, date: ${date}`);
+    
     // Step 1: Get geocoding information for the destination
+    io:println(string `[INFO] Calling geocoding API for destination: ${destination}`);
     geocodingApiResponseType geocodingApiResponse = check geocodingApi->/search.get(
         name = destination,
         count = "1",
@@ -168,8 +180,10 @@ function getWeatherImpact(string destination, string date) returns WeatherImpact
     ResultsItem locationResult = results[0];
     decimal latitude = locationResult.latitude;
     decimal longitude = locationResult.longitude;
+    io:println(string `[INFO] Geocoding successful. Location: ${locationResult.name}, Lat: ${latitude}, Lon: ${longitude}`);
 
     // Step 2: Get weather forecast using coordinates and date
+    io:println(string `[INFO] Calling weather API for coordinates: ${latitude}, ${longitude}, date: ${date}`);
     WeatherAPIResponseType weatherResponse = check weatherApi->/forecast.get(
         latitude = latitude.toString(),
         longitude = longitude.toString(),
@@ -209,6 +223,7 @@ function getWeatherImpact(string destination, string date) returns WeatherImpact
         recommendation = recommendation + " Cold weather expected. Dress warmly.";
     }
 
+    io:println(string `[INFO] Weather impact analysis completed. Temp: ${maxTemperature}°C, Rain: ${rainProbability}%`);
     return {
         summary: summary,
         recommendation: recommendation,

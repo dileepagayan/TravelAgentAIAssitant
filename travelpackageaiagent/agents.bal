@@ -1,4 +1,5 @@
 import ballerina/ai;
+import ballerina/io;
 import ballerina/mcp;
 
 
@@ -27,21 +28,33 @@ isolated class AiMcpbasetoolkit {
 
 // Create travel itinerary using AI Agent with MCP tools
 function createTravelItinerary(TravelRequest request) returns json|error {
+    io:println(string `[INFO] Starting travel itinerary creation for destination: ${request.destination}, budget: ${request.budget} USD`);
+    
     string RagQuery = string `Best travel package for destination ${request.destination}, budget ${request.budget} USD, interests ${request.interests.toString()}. Return package rules, itinerary, upsell options, and risk flags.`;
+    
+    io:println(string `[INFO] Retrieving knowledge base context with RAG query: ${RagQuery}`);
     ai:QueryMatch[] RagQueryResults = check aiVectorknowledgebase.retrieve(string `${RagQuery}`);
+    io:println(string `[INFO] RAG retrieval completed. Found ${RagQueryResults.length()} matching documents`);
 
+    io:println(string `[INFO] Invoking AI Agent to generate travel itinerary with MCP tools`);
     string agentResponse = check aiAgent.run(string `Create a travel itinerary package. Customer request: Destination: ${request.destination}; Travel Date: ${request.travelDate}; Budget: ${request.budget} USD; Interests: ${request.interests.toString()}; Agent Email: ${request.agentEmail}; Client Email: ${request.clientEmail}. Internal travel package context from RAG: ${RagQueryResults.toString()}`);
+    io:println(string `[INFO] AI Agent execution completed successfully`);
 
     json parsedResponse = check agentResponse.fromJsonString();
 
     agentResponseJson agentJsonResponse = check parsedResponse.cloneWithType(agentResponseJson);
 
     // Send emails to client and agent using the generated itineraries and details
+    io:println(string `[INFO] Sending client itinerary email to: ${request.clientEmail}`);
     check emailSmtpclient->send(string `${request.clientEmail}`, string `Your Personalized Travel Itinerary for ${request.destination}`, "\"noreply@travelagent.com\"", "\"\"", htmlBody = string `${agentJsonResponse.clientItineraryHtml}`);
+    io:println(string `[INFO] Client email sent successfully to: ${request.clientEmail}`);
 
     // Send internal email to agent with prospect details and next steps
+    io:println(string `[INFO] Sending prospect summary email to agent: ${request.agentEmail}`);
     check emailSmtpclient->send(string `${request.agentEmail}`, string `Travel Itinerary Prospect Summary For ${request.clientEmail} - ${request.destination}`, "\"noreply@travelagent.com\"", "\"\"", htmlBody = string `${agentJsonResponse.prospectDetailsHtml}`);
+    io:println(string `[INFO] Agent email sent successfully to: ${request.agentEmail}`);
 
+    io:println(string `[INFO] Travel itinerary creation completed successfully for destination: ${request.destination}`);
     return {
       "status": "success",
       "message": string `Emails sent to ${request.clientEmail} and ${request.agentEmail}`,
