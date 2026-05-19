@@ -1,41 +1,38 @@
 # AI Travel Package Assistant
 
-A demo built with **WSO2 Ballerina Integrator (BI)** and **Devant** showcasing how to compose an agentic AI workflow — RAG, an LLM agent, MCP-served tools, and email delivery — entirely in Ballerina, with no glue code.
+An agentic AI integration built with **WSO2 Ballerina Integrator** that automates travel itinerary creation — from retrieving internal packages via RAG, to calling live weather and places APIs, to sending personalised HTML emails to both the customer and the travel agent.
 
 ---
 
-## Business Use Case
+## What It Does
 
-Travel agencies spend hours building personalised itineraries: matching customer interests against internal packages, checking weather, finding real venues, applying margin rules, and writing two emails (one warm and customer-facing, one dense and agent-facing).
+A single API call triggers the full workflow:
 
-This assistant collapses that workflow into a single API call:
+1. The AI agent retrieves the best-fit travel package from a private knowledge base (RAG over Pinecone).
+2. It calls live tools to get the weather forecast and discover nearby attractions for the customer's interests.
+3. It applies the agency's business rules (budget bands, upsell logic, risk flags).
+4. It sends a **customer-facing itinerary email** and an **agent-facing prospect summary email** via SMTP.
 
-1. A customer travel request lands at the agency's intake form.
-2. The AI agent retrieves the best-fit internal travel package from the agency's private knowledge base (RAG over Pinecone).
-3. It pulls live weather for the travel date and discovers nearby attractions matching the customer's interests.
-4. It applies the agency's business rules — budget bands, partner-vendor preferences, weather-driven scheduling, upsell logic.
-5. It emails the **customer** a beautifully formatted itinerary and emails the **travel agent** an internal prospect summary with fit score, margin signals, risk flags, and the next action.
-
-The agent never invents packages — every recommendation is grounded in the agency's RAG-indexed playbook.
+The agent never fabricates packages — every recommendation is grounded in the RAG-indexed knowledge base.
 
 ---
 
-## Solution Architecture
+## Architecture
 
 ```mermaid
 flowchart LR
-    Client[Customer / Booking Form] -->|POST /create-itinerary| Agent
+    Client[Customer / Booking Form] -->|POST /TravelItineraryAPI/itinerary| Agent
 
-    subgraph Agent_Service [travelpackageaiagent - BI service]
-        Agent[AI Agent Service]
+    subgraph travelpackageaiagent
+        Agent[AI Agent]
         RAG[(Pinecone Vector KB)]
         LLM[OpenAI gpt-4o-mini]
         Agent -->|retrieve packages| RAG
-        Agent -->|reason and synthesise| LLM
+        Agent -->|reason + synthesise| LLM
     end
 
-    subgraph MCP_Service [travelpackagemcpserver - BI service]
-        MCP[MCP Tool Server]
+    subgraph travelpackagemcpserver
+        MCP[MCP Tool Server :9090]
         Weather[getWeatherImpact]
         Places[findTravelPlaces]
         MCP --> Weather
@@ -45,81 +42,69 @@ flowchart LR
     Agent -->|MCP over HTTP| MCP
     Weather -->|HTTPS| OpenMeteo[Open-Meteo Weather API]
     Places -->|HTTPS| Geoapify[Geoapify Places API]
-    Weather -->|HTTPS| Geocode[Open-Meteo Geocoding]
-    Places -->|HTTPS| Geocode
+    Weather & Places -->|HTTPS| Geocode[Open-Meteo Geocoding]
 
-    Agent -->|SMTP| Customer[Customer Inbox]
-    Agent -->|SMTP| AgentInbox[Travel Agent Inbox]
+    Agent -->|SMTP / Gmail| Customer[Customer Inbox]
+    Agent -->|SMTP / Gmail| AgentInbox[Travel Agent Inbox]
 
-    KBFile[Travel Packages Knowledge Base] -->|POST /update-kb| Agent
+    KBFile[Knowledge Base .md file] -->|POST /TravelItineraryAPI/kb| Agent
 ```
 
-### Two BI projects, one story
+---
 
-| Project | Role | Endpoints |
+## Projects
+
+| Project | Role | Key Files |
 |---|---|---|
-| `travelpackageaiagent` | Hosts the AI agent, RAG ingestion, and email delivery | `POST /TravelItineraryAPI/create-itinerary`, `POST /TravelItineraryAPI/update-kb` |
-| `travelpackagemcpserver` | Exposes weather and places as MCP tools the agent can call | `getWeatherImpact`, `findTravelPlaces` |
+| `travelpackageaiagent` | AI agent, RAG ingestion, email delivery | `agents.bal`, `connections.bal`, `functions.bal`, `main.bal` |
+| `travelpackagemcpserver` | MCP tool server exposing weather and places tools | `main.bal`, `functions.bal`, `connections.bal` |
 
-### Why this layout matters for the demo
+### travelpackageaiagent
 
-- **BI's agentic story** lives in one file — `agents.bal` declares the agent, its memory, its tools, and its model in a few lines.
-- **MCP tools as a separate service** demonstrates Devant's service-to-service composition — two independently deployable BI projects connected at runtime.
-- **RAG, LLM, and tool calls** all appear as first-class nodes in the BI graphical sequence view.
+- **`main.bal`** — HTTP service with two endpoints: `POST /itinerary` and `POST /kb`.
+- **`agents.bal`** — Declares the AI agent (`ballerina/ai`), the MCP toolkit, and the system prompt. The agent is capped at 100 iterations and uses `gpt-4o-mini`.
+- **`connections.bal`** — Initialises all clients: Pinecone vector store, OpenAI embedding + model providers, MCP client, and Gmail SMTP client.
+- **`functions.bal`** — `createTravelItinerary` orchestrates the RAG query, agent run, and email dispatch. `updateKB` writes an uploaded markdown file to disk and ingests it into Pinecone.
+- **`types.bal`** — `TravelRequest` (request payload) and `agentResponseJson` (agent output shape).
+
+### travelpackagemcpserver
+
+- **`main.bal`** — MCP service listener on port `9090`, exposing two remote tools.
+- **`functions.bal`** — `getWeatherImpact`: geocodes the destination, fetches a single-day forecast (max temperature + rain probability), and returns a human-readable summary and recommendation. `findTravelPlaces`: geocodes the destination, maps customer interests to Geoapify categories, and returns up to 10 nearby places.
+- **`connections.bal`** — Three HTTP clients: Open-Meteo geocoding, Open-Meteo forecast, and Geoapify Places.
+- **`types.bal`** — All external API response types and tool response types.
 
 ---
 
 ## Tech Stack
 
-- **WSO2 Ballerina Integrator** — `ballerina/ai`, `ballerina/mcp`, `ballerina/http`, `ballerina/email`
-- **OpenAI** — `gpt-4o-mini` for reasoning, `text-embedding-3-small` for embeddings
-- **Pinecone** — vector store for the agency's internal package knowledge base
-- **Geoapify Places API** — real-world attractions, restaurants, parks
-- **Open-Meteo** — geocoding and weather forecast
-- **SMTP** — itinerary and prospect emails
-
----
-
-## Project Structure
-
-```
-DevantWorkspace/
-├── travelpackageaiagent/          # AI agent + RAG + email
-│   ├── agents.bal                 # Agent declaration, MCP toolkit, system prompt
-│   ├── connections.bal            # Pinecone, OpenAI, SMTP, MCP client
-│   ├── functions.bal              # Itinerary orchestration + KB update
-│   ├── main.bal                   # HTTP service entry points
-│   ├── types.bal                  # Request and response records
-│   ├── config.bal                 # configurable secrets
-│   ├── files/ReceivedFile.md      # Default packages knowledge base
-│   └── Config.toml                # Secrets (gitignored)
-│
-└── travelpackagemcpserver/        # MCP tools server
-    ├── main.bal                   # MCP service listener
-    ├── functions.bal              # Weather + places implementations
-    ├── connections.bal            # Geocoding, weather, places HTTP clients
-    ├── types.bal                  # External API + tool response types
-    ├── config.bal                 # GEOAPIFY_API_KEY
-    └── Config.toml                # Secrets (gitignored)
-```
+| Component | Technology |
+|---|---|
+| Integration runtime | WSO2 Ballerina Integrator (`ballerina/ai`, `ballerina/mcp`, `ballerina/http`, `ballerina/email`) |
+| LLM | OpenAI `gpt-4o-mini` |
+| Embeddings | OpenAI `text-embedding-3-small` |
+| Vector store | Pinecone |
+| Weather & geocoding | Open-Meteo (free, no key required) |
+| Places | Geoapify Places API |
+| Email | Gmail SMTP |
 
 ---
 
 ## Prerequisites
 
 - **Ballerina 2201.13.2** or compatible
-- **VS Code + Ballerina Integrator extension** (recommended for the graphical view)
-- API keys for:
-  - OpenAI
-  - Pinecone (with an index named `travelpackage` or update the URL in `connections.bal`)
-  - Geoapify
-- SMTP credentials (Gmail app password, SendGrid, or any SMTP provider)
+- API keys / credentials:
+  - OpenAI API key
+  - Pinecone API key (index URL: `https://travelpackage-3a9c20c.svc.aped-4627-b74a.pinecone.io`)
+  - Gmail account with an app password (or any SMTP provider)
+
+> Geoapify is currently hardcoded in `functions.bal`. Replace the key there if needed.
 
 ---
 
 ## Configuration
 
-Both projects read secrets from their own `Config.toml`. The files are gitignored — create them locally:
+Each project has its own `Config.toml` (gitignored). Create them before running.
 
 ### `travelpackageaiagent/Config.toml`
 
@@ -127,34 +112,27 @@ Both projects read secrets from their own `Config.toml`. The files are gitignore
 [dileepagayan.travelpackageaiagent]
 OPEN_AI_KEY    = "sk-..."
 PINECONE_KEY   = "pcsk-..."
-SMTP_HOST      = "smtp.gmail.com"
-SMTP_USERNAME  = "your-sender@example.com"
-SMTP_PASSWORD  = "your-app-password"
+EMAIL_USERNAME = "your-sender@gmail.com"
+EMAIL_PASSWORD = "your-app-password"
+MCP_SERVER_URL = "http://localhost:9090"
 ```
 
 ### `travelpackagemcpserver/Config.toml`
 
-```toml
-[dileepagayan.travelpackagemcpserver]
-GEOAPIFY_API_KEY = "..."
-```
-
-> **Security note:** rotate every key after the demo. The keys are in plain text on disk; if your editor or terminal is ever visible during a screen share, they leak.
+No required configurables — the Geoapify key is currently hardcoded in `functions.bal`.
 
 ---
 
 ## Running Locally
 
-Two terminals — MCP server first, agent second.
+Start the MCP server first, then the agent service.
 
-### 1. Start the MCP server (port 8080)
+### 1. Start the MCP tool server (port 9090)
 
 ```bash
 cd travelpackagemcpserver
 bal run
 ```
-
-You should see `[ballerina/http] started HTTP/WS listener 0.0.0.0:8080`.
 
 ### 2. Start the AI agent service
 
@@ -163,14 +141,14 @@ cd travelpackageaiagent
 bal run
 ```
 
-The default HTTP listener binds to `9090` (Ballerina's `http:getDefaultListener()`).
+The agent service starts on Ballerina's default HTTP listener (port `9090` by default — change `MCP_SERVER_URL` accordingly if there is a port conflict).
 
-### 3. Load the knowledge base into Pinecone
+### 3. Load the knowledge base
 
-The agent grounds every recommendation in `files/ReceivedFile.md`. Ingest it once:
+Upload a markdown file containing your travel packages. This ingests it into Pinecone:
 
 ```bash
-curl -X POST http://localhost:9090/TravelItineraryAPI/update-kb \
+curl -X POST http://localhost:9090/TravelItineraryAPI/kb \
   -H "Content-Type: text/markdown" \
   --data-binary @travelpackageaiagent/files/ReceivedFile.md
 ```
@@ -178,7 +156,7 @@ curl -X POST http://localhost:9090/TravelItineraryAPI/update-kb \
 ### 4. Request an itinerary
 
 ```bash
-curl -X POST http://localhost:9090/TravelItineraryAPI/create-itinerary \
+curl -X POST http://localhost:9090/TravelItineraryAPI/itinerary \
   -H "Content-Type: application/json" \
   -d '{
     "destination": "Las Vegas",
@@ -190,67 +168,40 @@ curl -X POST http://localhost:9090/TravelItineraryAPI/create-itinerary \
   }'
 ```
 
-The response is a JSON acknowledgement; the customer and the travel agent receive their respective HTML emails shortly after.
+**Response**
+
+```json
+{
+  "status": "success",
+  "message": "Emails sent to jane@example.com and alex@travelco.com",
+  "destination": "Las Vegas"
+}
+```
+
+Both the customer and the travel agent receive HTML emails shortly after.
 
 ---
 
 ## API Reference
 
-### `POST /TravelItineraryAPI/create-itinerary`
+### `POST /TravelItineraryAPI/itinerary`
 
-Generates a personalised itinerary and dispatches both emails.
+Generates a personalised itinerary and sends two emails.
 
-**Request body**
+| Field | Type | Description |
+|---|---|---|
+| `destination` | string | City name (e.g. `"Las Vegas"`) |
+| `travelDate` | string | ISO date (e.g. `"2026-05-20"`) |
+| `budget` | int | Budget in USD |
+| `interests` | string[] | e.g. `["romantic", "shows", "good food"]` |
+| `clientEmail` | string | Customer's email address |
+| `agentEmail` | string | Travel agent's email address |
 
-```json
-{
-  "destination": "Las Vegas",
-  "travelDate": "2026-05-20",
-  "budget": 2000,
-  "interests": ["romantic", "shows", "good food"],
-  "clientEmail": "jane@example.com",
-  "agentEmail": "alex@travelco.com"
-}
-```
+Supported interest values: `romantic`, `shows`, `food`, `good food`, `scenic`, `family`, `culture`.
 
-**Response (200 OK)**
+### `POST /TravelItineraryAPI/kb`
 
-```json
-{
-  "status": "success",
-  "message": "Itinerary and prospect summary emailed successfully.",
-  "clientEmail": "jane@example.com",
-  "agentEmail": "alex@travelco.com",
-  "destination": "Las Vegas"
-}
-```
-
-### `POST /TravelItineraryAPI/update-kb`
-
-Re-ingests a markdown knowledge base into Pinecone. Body is the raw markdown file.
-
----
-
-## Suggested Demo Flow
-
-1. **Open the BI graphical view** for `create-itinerary` — point out the RAG node, the agent node, and the MCP tool nodes.
-2. **Show the knowledge base** — open `files/ReceivedFile.md`, scroll through a package, highlight the business rules section.
-3. **Ingest the KB live** — POST to `/update-kb`, narrate "the agency just gave the agent its playbook."
-4. **Submit a Vegas couple request** — hit `/create-itinerary`. Switch to the inbox on screen; both emails arrive within a few seconds.
-5. **Open the client email** — beautifully formatted, customer-friendly.
-6. **Open the agent email** — fit score, margin, business rules applied, recommended upsell, risk flags, next action.
-7. **Switch destinations** to somewhere not in the KB — show the agent's graceful behaviour (risk flag, no hallucination).
-8. **Switch to Devant** — show both BI projects deployed, observability traces of the LLM call, the MCP tool calls, and the SMTP send.
-
----
-
-## Roadmap
-
-- Multi-day weather forecast (currently single-day per request).
-- Per-session memory scoping (avoid cross-prospect context bleed).
-- Tracking IDs and a `/itinerary/{id}` polling endpoint.
-- Streaming LLM responses for live "thinking" feedback.
-- Devant-managed email connector to replace direct SMTP.
+Uploads a markdown knowledge base file and ingests it into Pinecone. Send the raw file as the request body.
 
 ---
 
