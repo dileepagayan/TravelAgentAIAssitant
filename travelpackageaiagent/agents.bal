@@ -2,7 +2,6 @@ import ballerina/ai;
 import ballerina/io;
 import ballerina/mcp;
 
-
 isolated class AiMcpbasetoolkit {
     *ai:McpBaseToolKit;
     private final mcp:StreamableHttpClient mcpClient;
@@ -29,9 +28,9 @@ isolated class AiMcpbasetoolkit {
 // Create travel itinerary using AI Agent with MCP tools
 function createTravelItinerary(TravelRequest request) returns json|error {
     io:println(string `[INFO] Starting travel itinerary creation for destination: ${request.destination}, budget: ${request.budget} USD`);
-    
+
     string RagQuery = string `Best travel package for destination ${request.destination}, budget ${request.budget} USD, interests ${request.interests.toString()}. Return package rules, itinerary, upsell options, and risk flags.`;
-    
+
     io:println(string `[INFO] Retrieving knowledge base context with RAG query: ${RagQuery}`);
     ai:QueryMatch[] RagQueryResults = check aiVectorknowledgebase.retrieve(string `${RagQuery}`);
     io:println(string `[INFO] RAG retrieval completed. Found ${RagQueryResults.length()} matching documents`);
@@ -56,11 +55,10 @@ function createTravelItinerary(TravelRequest request) returns json|error {
 
     io:println(string `[INFO] Travel itinerary creation completed successfully for destination: ${request.destination}`);
     return {
-      "status": "success",
-      "message": string `Emails sent to ${request.clientEmail} and ${request.agentEmail}`,
-      "destination": request.destination
+        "status": "success",
+        "message": string `Emails sent to ${request.clientEmail} and ${request.agentEmail}`,
+        "destination": request.destination
     };
-  
 
 }
 
@@ -70,6 +68,6 @@ final ai:Agent aiAgent = check new (
     systemPrompt = {
         role: string `AI Travel Package Assistant`,
         instructions: string `You are a travel package assistant. Steps: 1. Pick one package from the RAG context. Do not invent names. 2. Call getWeatherImpact(destination, travelDate). 3. Call findTravelPlaces(destination, interests). 4. Apply the business rules from the RAG context. Return ONLY this JSON (no markdown, no extra text): {"clientEmail":"<echo input>","agentEmail":"<echo input>","clientItineraryHtml":"<HTML for the client>","prospectDetailsHtml":"<HTML for the agent>"} HTML rules for both fields: use a single <div> root, max-width 600px, inline styles only; font Arial, 14px, color #1f2937; accent color #0ea5e9; no <style>, <script>, or external CSS. clientItineraryHtml must be warm and customer-facing, including destination header, package name and description, weather summary, day-by-day itinerary, and optional add-ons; do not include fit score, margins, or risk flags. prospectDetailsHtml must be internal and agent-facing, including package ID and name, estimated cost, fit score, budget status, business rules applied, recommended upsell, risk flags, and next action; do not include full itinerary.`
-    }, model = openaiModelprovider, tools = [aiMcpbasetoolkit], maxIter = 100
+    }, maxIter = 100, model = openaiModelprovider, tools = [aiMcpbasetoolkit]
 );
 

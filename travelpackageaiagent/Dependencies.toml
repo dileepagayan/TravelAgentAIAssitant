@@ -5,7 +5,7 @@
 
 [ballerina]
 dependencies-toml-version = "2"
-distribution-version = "2201.13.2"
+distribution-version = "2201.13.4"
 
 [[package]]
 org = "ballerina"
@@ -59,14 +59,6 @@ dependencies = [
 	{org = "ballerina", name = "jballerina.java"},
 	{org = "ballerina", name = "task"},
 	{org = "ballerina", name = "time"}
-]
-
-[[package]]
-org = "ballerina"
-name = "cloud"
-version = "4.0.0"
-modules = [
-	{org = "ballerina", packageName = "cloud", moduleName = "cloud"}
 ]
 
 [[package]]
@@ -471,7 +463,6 @@ name = "travelpackageaiagent"
 version = "0.1.0"
 dependencies = [
 	{org = "ballerina", name = "ai"},
-	{org = "ballerina", name = "cloud"},
 	{org = "ballerina", name = "email"},
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "io"},
